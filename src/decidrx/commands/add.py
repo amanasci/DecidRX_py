@@ -35,6 +35,9 @@ def cmd_add(args):
         args.penalty = prompt_int("Penalty (1-10)", current=getattr(args, "penalty", 0) or 0, minimum=0, maximum=10)
         args.effort = prompt_int("Effort (1-10)", current=getattr(args, "effort", 0) or 0, minimum=0, maximum=10)
 
+        # description (optional)
+        args.description = prompt_str("Description (optional)", current=getattr(args, 'description', '') or '')
+
         while True:
             t = prompt_str("Type (deep/shallow)", current=getattr(args, "type", "shallow"))
             if t in ("deep", "shallow"):
@@ -48,5 +51,5 @@ def cmd_add(args):
             return
 
     deadline_dt = parse_deadline(args.deadline) if args.deadline is not None else None
-    task_id = db.add_task(title=args.title, deadline=deadline_dt, duration=args.duration, reward=args.reward, penalty=args.penalty, effort=args.effort, type=args.type)
+    task_id = db.add_task(title=args.title, deadline=deadline_dt, description=getattr(args, 'description', None), duration=args.duration, reward=args.reward, penalty=args.penalty, effort=args.effort, type=args.type)
     console.print(f"Added task [bold]{args.title}[/bold] (id={task_id})")

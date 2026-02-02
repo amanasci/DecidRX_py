@@ -11,6 +11,8 @@ from .commands.stats import cmd_stats as cmd_stats
 from .commands.show import cmd_show as cmd_show
 from .commands.edit import cmd_edit as cmd_edit
 from .commands.reset import cmd_reset as cmd_reset
+from .commands.archive import cmd_archive as cmd_archive
+from .commands.undone import cmd_undone as cmd_undone
 from rich.panel import Panel
 
 # Per-command examples to surface in help
@@ -21,6 +23,7 @@ EXAMPLES = {
     "edit": "decidrx edit 1 --title \"New title\"  # non-interactive\n  decidrx edit 1  # interactive edit",
     "show": "decidrx show  # show pending tasks\n  decidrx show --all  # include completed tasks",
     "reset": "decidrx reset  # interactively confirm and reset DB\n  decidrx reset --yes  # force reset without prompt",
+    "archive": "decidrx archive  # show every task in the DB (history view)",
 }
 
 
@@ -39,6 +42,7 @@ def build_parser():
     # Make title optional so we can prompt interactively when it's omitted
     p_add.add_argument("title", nargs="?")
     p_add.add_argument("--deadline", type=int, help="deadline in days (from now)")
+    p_add.add_argument("--description", type=str, help="Short description of the task")
     p_add.add_argument("--duration", type=int, default=0)
     p_add.add_argument("--reward", type=int, default=0)
     p_add.add_argument("--penalty", type=int, default=0)
@@ -60,6 +64,7 @@ def build_parser():
     p_edit.add_argument("task_id", type=int)
     p_edit.add_argument("--title")
     p_edit.add_argument("--deadline", type=int, help="deadline in days (from now)")
+    p_edit.add_argument("--description", type=str, help="Short description of the task")
     p_edit.add_argument("--duration", type=int)
     p_edit.add_argument("--reward", type=int)
     p_edit.add_argument("--penalty", type=int)
@@ -67,6 +72,10 @@ def build_parser():
     p_edit.add_argument("--type", choices=["deep", "shallow"])
     p_edit.add_argument("--interactive", action="store_true", help="Force interactive editing")
     p_edit.set_defaults(func=cmd_edit)
+
+    p_undone = sub.add_parser("undone", help="Mark a task as not completed")
+    p_undone.add_argument("task_id", type=int)
+    p_undone.set_defaults(func=cmd_undone)
 
     p_help = sub.add_parser("help", help="Show help for commands")
     p_help.add_argument("subcommand", nargs="?", help="Command to show help for")
@@ -82,6 +91,9 @@ def build_parser():
     p_show = sub.add_parser("show")
     p_show.add_argument("--all", action="store_true", help="Show all tasks including completed")
     p_show.set_defaults(func=cmd_show)
+
+    p_archive = sub.add_parser("archive", help="Show all tasks irrespective of done status")
+    p_archive.set_defaults(func=cmd_archive)
 
     return parser
 

@@ -98,6 +98,14 @@ def cmd_edit(args):
         if e_i != (task["effort"] or 0):
             updates["effort"] = e_i
 
+        # description
+        # use explicit index access on sqlite Row
+        cur_desc = task["description"] if "description" in task.keys() else None
+        new_desc = Prompt.ask("Description (leave blank to keep)", default=cur_desc or "").strip()
+        if new_desc != (cur_desc or ""):
+            updates["description"] = new_desc
+
+        # type
         t = Prompt.ask("Type (deep/shallow)", default=task["type"] or "shallow").strip()
         if t and t in ("deep", "shallow") and t != task["type"]:
             updates["type"] = t
@@ -110,6 +118,8 @@ def cmd_edit(args):
                 console.print("Deadline must be >= 0.")
                 return
             updates["deadline"] = parse_deadline(args.deadline)
+        if args.description is not None:
+            updates["description"] = args.description
         if args.duration is not None:
             if args.duration < 0:
                 console.print("Duration must be >= 0.")
@@ -135,7 +145,6 @@ def cmd_edit(args):
                 console.print("Type must be 'deep' or 'shallow'.")
                 return
             updates["type"] = args.type
-
     if not updates:
         console.print("No changes.")
         return

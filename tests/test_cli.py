@@ -34,6 +34,7 @@ def test_add_interactive(tmp_path, monkeypatch):
         "4",  # Reward
         "1",  # Penalty
         "2",  # Effort
+        "",  # description (blank)
         "shallow",  # Type
     ]
 
@@ -63,7 +64,7 @@ def test_add_with_args_stays_noninteractive(tmp_path, monkeypatch):
     monkeypatch.setenv("DECIDRX_DB", str(dbfile))
     from decidrx.cli import build_parser, cmd_add
 
-    args = build_parser().parse_args(["add", "Arg Task", "--duration", "10", "--reward", "3"])
+    args = build_parser().parse_args(["add", "Arg Task", "--description", "Short description", "--duration", "10", "--reward", "3"])
     cmd_add(args)
 
     db = Database(str(dbfile))
@@ -72,6 +73,7 @@ def test_add_with_args_stays_noninteractive(tmp_path, monkeypatch):
     assert tasks[0]["title"] == "Arg Task"
     assert tasks[0]["duration"] == 10
     assert tasks[0]["reward"] == 3
+    assert tasks[0]["description"] == "Short description"
 
 
 def test_help_general_and_command(monkeypatch):
@@ -115,6 +117,7 @@ def test_add_interactive_validation(tmp_path, monkeypatch):
         "5",
         "1",
         "2",
+        "",  # description (blank)
         "shallow",
     ]
 
@@ -190,6 +193,56 @@ def test_show_shows_tasks(tmp_path, monkeypatch):
     assert re.search(r"\b(overdue\s)?\d+[dhms]\b", text_all)
 
 
+def test_archive_shows_all(tmp_path, monkeypatch):
+    from rich.console import Console
+    dbfile = tmp_path / "test_archive.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    id1 = db.add_task("A", now + timedelta(days=1), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+    id2 = db.add_task("B", now + timedelta(days=2), duration=20, reward=2, penalty=0, effort=1, type="deep")
+    db.mark_done(id2)
+
+    from decidrx import cli
+    printed = []
+
+    def fake_print(obj, *args, **kwargs):
+        c = Console(record=True)
+        c.print(obj)
+        printed.append(c.export_text())
+
+    monkeypatch.setattr(cli.console, "print", fake_print)
+
+    from decidrx.cli import build_parser, cmd_archive
+
+    args = build_parser().parse_args(["archive"])
+    cmd_archive(args)
+
+    text = "\n".join(s for s in printed if isinstance(s, str))
+    assert "A" in text
+    assert "B" in text
+    assert "1" in text
+    assert "2" in text
+
+
+def test_undone_marks_task_not_completed(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_undone.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    tid = db.add_task("Do then undo", now + timedelta(days=1), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+    db.mark_done(tid)
+
+    from decidrx.cli import build_parser, cmd_undone
+
+    args = build_parser().parse_args(["undone", str(tid)])
+    cmd_undone(args)
+
+    t = db.get_task(tid)
+    assert t["completed"] == 0
+    assert t["completed_at"] is None
+
+
 def test_reset_cancelled(tmp_path, monkeypatch):
     dbfile = tmp_path / "test_reset.db"
     monkeypatch.setenv("DECIDRX_DB", str(dbfile))
@@ -249,22 +302,41 @@ def test_reset_force_flag(tmp_path, monkeypatch):
     assert len(tasks) == 0
 
 
+def test_mark_done_records_completed_at(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_done.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    tid = db.add_task("Finish me", now + timedelta(days=1), duration=15, reward=2, penalty=0, effort=1, type="shallow")
+
+    # mark done
+    db.mark_done(tid)
+
+    t = db.get_task(tid)
+    assert t["completed"] == 1
+    assert t["completed_at"] is not None
+    # ensure it's parseable ISO datetime
+    from datetime import datetime as _dt
+    _dt.fromisoformat(t["completed_at"])  # should not raise
+
+
 def test_edit_noninteractive(tmp_path, monkeypatch):
     dbfile = tmp_path / "test_edit.db"
     monkeypatch.setenv("DECIDRX_DB", str(dbfile))
     db = Database(str(dbfile))
     now = datetime.now(timezone.utc)
-    tid = db.add_task("Old", now + timedelta(days=1), duration=30, reward=3, penalty=1, effort=2, type="shallow")
+    tid = db.add_task("Old", now + timedelta(days=1), description="old desc", duration=30, reward=3, penalty=1, effort=2, type="shallow")
 
     from decidrx.cli import build_parser, cmd_edit
 
-    args = build_parser().parse_args(["edit", str(tid), "--title", "New", "--duration", "10", "--reward", "5"])
+    args = build_parser().parse_args(["edit", str(tid), "--title", "New", "--duration", "10", "--reward", "5", "--description", "new desc"])
     cmd_edit(args)
 
     t = db.get_task(tid)
     assert t["title"] == "New"
     assert t["duration"] == 10
     assert t["reward"] == 5
+    assert t["description"] == "new desc"
 
 
 def test_edit_interactive(tmp_path, monkeypatch):
@@ -284,6 +356,7 @@ def test_edit_interactive(tmp_path, monkeypatch):
         "5",  # reward valid
         "1",  # penalty
         "2",  # effort
+        "",  # description keep
         "deep",  # type
     ]
 

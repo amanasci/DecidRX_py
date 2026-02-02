@@ -25,15 +25,26 @@ class Database:
             id INTEGER PRIMARY KEY,
             title TEXT NOT NULL,
             deadline TEXT,
+            description TEXT,
             duration INTEGER,
             reward INTEGER,
             penalty INTEGER,
             effort INTEGER,
             type TEXT,
             created_at TEXT,
-            completed INTEGER DEFAULT 0
+            completed INTEGER DEFAULT 0,
+            completed_at TEXT
         )
         """)
+        # Ensure older DBs get the new columns
+        cur.execute("PRAGMA table_info(tasks)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "description" not in cols:
+            cur.execute("ALTER TABLE tasks ADD COLUMN description TEXT")
+            self.conn.commit()
+        if "completed_at" not in cols:
+            cur.execute("ALTER TABLE tasks ADD COLUMN completed_at TEXT")
+            self.conn.commit()
         cur.execute("""
         CREATE TABLE IF NOT EXISTS completions (
             task_id INTEGER,
@@ -42,13 +53,13 @@ class Database:
         """)
         self.conn.commit()
 
-    def add_task(self, title: str, deadline: Optional[datetime], duration: int = 0, reward: int = 0, penalty: int = 0, effort: int = 0, type: str = "shallow") -> int:
+    def add_task(self, title: str, deadline: Optional[datetime], description: Optional[str] = None, duration: int = 0, reward: int = 0, penalty: int = 0, effort: int = 0, type: str = "shallow") -> int:
         created_at = datetime.utcnow().isoformat()
         deadline_s = deadline.isoformat() if deadline else None
         cur = self.conn.cursor()
         cur.execute(
-            "INSERT INTO tasks (title, deadline, duration, reward, penalty, effort, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (title, deadline_s, duration, reward, penalty, effort, type, created_at),
+            "INSERT INTO tasks (title, deadline, description, duration, reward, penalty, effort, type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, deadline_s, description, duration, reward, penalty, effort, type, created_at),
         )
         self.conn.commit()
         return cur.lastrowid
@@ -92,9 +103,17 @@ class Database:
 
     def mark_done(self, task_id: int):
         cur = self.conn.cursor()
-        cur.execute("UPDATE tasks SET completed = 1 WHERE id = ?", (task_id,))
-        cur.execute("INSERT INTO completions (task_id, completed_at) VALUES (?, ?)", (task_id, datetime.utcnow().isoformat()))
+        completed_at = datetime.utcnow().isoformat()
+        cur.execute("UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ?", (completed_at, task_id))
+        cur.execute("INSERT INTO completions (task_id, completed_at) VALUES (?, ?)", (task_id, completed_at))
         self.conn.commit()
+
+    def mark_undone(self, task_id: int):
+        """Mark a task as not completed and clear completed_at."""
+        cur = self.conn.cursor()
+        cur.execute("UPDATE tasks SET completed = 0, completed_at = NULL WHERE id = ?", (task_id,))
+        self.conn.commit()
+        return True
 
     def stats(self) -> Dict[str, int]:
         cur = self.conn.cursor()
