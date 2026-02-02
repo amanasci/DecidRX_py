@@ -10,6 +10,7 @@ from .commands.done import cmd_done as cmd_done
 from .commands.stats import cmd_stats as cmd_stats
 from .commands.show import cmd_show as cmd_show
 from .commands.edit import cmd_edit as cmd_edit
+from .commands.reset import cmd_reset as cmd_reset
 from rich.panel import Panel
 
 # Per-command examples to surface in help
@@ -19,6 +20,7 @@ EXAMPLES = {
     "quick": "decidrx quick  # shows quick wins (<20 min)",
     "edit": "decidrx edit 1 --title \"New title\"  # non-interactive\n  decidrx edit 1  # interactive edit",
     "show": "decidrx show  # show pending tasks\n  decidrx show --all  # include completed tasks",
+    "reset": "decidrx reset  # interactively confirm and reset DB\n  decidrx reset --yes  # force reset without prompt",
 }
 
 
@@ -72,6 +74,10 @@ def build_parser():
 
     p_stats = sub.add_parser("stats")
     p_stats.set_defaults(func=cmd_stats)
+
+    p_reset = sub.add_parser("reset", help="Reset the database (destructive)")
+    p_reset.add_argument("--yes", action="store_true", help="Skip confirmation and reset immediately")
+    p_reset.set_defaults(func=cmd_reset)
 
     p_show = sub.add_parser("show")
     p_show.add_argument("--all", action="store_true", help="Show all tasks including completed")

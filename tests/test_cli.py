@@ -158,16 +158,95 @@ def test_show_shows_tasks(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli.console, "print", fake_print)
 
+    from rich.console import Console
     from decidrx.cli import build_parser, cmd_show
+    import re
+
+    def fake_print(obj, *args, **kwargs):
+        c = Console(record=True)
+        c.print(obj)
+        printed.append(c.export_text())
+
+    monkeypatch.setattr(cli.console, "print", fake_print)
 
     args = build_parser().parse_args(["show"])
     cmd_show(args)
-    assert any(isinstance(x, Table) for x in printed)
+    assert any(isinstance(x, str) for x in printed)
+
+    # ensure "left" header present in rendered text
+    text = "\n".join(s for s in printed if isinstance(s, str))
+    assert "left" in text.lower()
+
+    # ensure the rendered table includes at least one time-like token (e.g., '1d', '3h', '45m', 'overdue')
+    assert re.search(r"\b(overdue\s)?\d+[dhms]\b", text)
 
     printed.clear()
     args = build_parser().parse_args(["show", "--all"])
     cmd_show(args)
-    assert any(isinstance(x, Table) for x in printed)
+    assert any(isinstance(x, str) for x in printed)
+    text_all = "\n".join(s for s in printed if isinstance(s, str))
+    assert "1" in text_all
+    assert "2" in text_all
+    assert re.search(r"\b(overdue\s)?\d+[dhms]\b", text_all)
+
+
+def test_reset_cancelled(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_reset.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    tid = db.add_task("Keep me", now + timedelta(days=1), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+
+    from rich.prompt import Confirm
+
+    monkeypatch.setattr(Confirm, "ask", lambda *a, **k: False)
+
+    from decidrx.cli import build_parser, cmd_reset
+
+    args = build_parser().parse_args(["reset"])
+    cmd_reset(args)
+
+    db2 = Database(str(dbfile))
+    tasks = db2.get_pending_tasks()
+    assert len(tasks) == 1
+
+
+def test_reset_confirmed(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_reset2.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    tid = db.add_task("Delete me", now + timedelta(days=1), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+
+    from rich.prompt import Confirm
+
+    monkeypatch.setattr(Confirm, "ask", lambda *a, **k: True)
+
+    from decidrx.cli import build_parser, cmd_reset
+
+    args = build_parser().parse_args(["reset"])
+    cmd_reset(args)
+
+    db2 = Database(str(dbfile))
+    tasks = db2.get_pending_tasks()
+    assert len(tasks) == 0
+
+
+def test_reset_force_flag(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_reset3.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    now = datetime.now(timezone.utc)
+    tid = db.add_task("Delete me too", now + timedelta(days=1), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+
+    from decidrx.cli import build_parser, cmd_reset
+
+    args = build_parser().parse_args(["reset", "--yes"])
+    cmd_reset(args)
+
+    db2 = Database(str(dbfile))
+    tasks = db2.get_pending_tasks()
+    assert len(tasks) == 0
 
 
 def test_edit_noninteractive(tmp_path, monkeypatch):

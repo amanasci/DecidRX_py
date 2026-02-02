@@ -103,3 +103,26 @@ class Database:
         cur.execute("SELECT COUNT(*) as done FROM tasks WHERE completed = 1")
         done = cur.fetchone()[0]
         return {"total": total, "done": done}
+
+    def reset(self):
+        """Reset the database by removing the file and creating a fresh DB.
+
+        This is destructive. Callers should confirm with the user before invoking.
+        """
+        # Close existing connection
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        # Remove file
+        try:
+            if os.path.exists(self.path):
+                os.remove(self.path)
+        except Exception:
+            pass
+        # Recreate connection and schema
+        self._ensure_dir()
+        self.conn = sqlite3.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.conn.row_factory = sqlite3.Row
+        self.init_db()
+        return True
