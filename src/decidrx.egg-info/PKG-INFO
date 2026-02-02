@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: decidrx
-Version: 0.1.0
-Summary: CLI decision engine to prioritize tasks
-Requires-Python: >=3.10
-Requires-Dist: rich
