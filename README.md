@@ -1,4 +1,5 @@
-# DecidRX
+<!-- Adding logo from images/DecidRX.svg -->
+![DecidRX Logo](images/DecidRX.svg)
 
 🔧 DecidRX is a lightweight terminal-first decision engine that tells you *what to do right now*. It ranks your tasks based on deadlines, effort, reward and penalty so you can reduce decision fatigue and get daily wins.
 
