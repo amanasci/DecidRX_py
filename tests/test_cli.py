@@ -76,6 +76,41 @@ def test_add_with_args_stays_noninteractive(tmp_path, monkeypatch):
     assert tasks[0]["description"] == "Short description"
 
 
+def test_add_with_parent_noninteractive(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_add_parent.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    from decidrx.cli import build_parser, cmd_add
+
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent for CLI", None, duration=5, reward=1, penalty=0, effort=1, type="shallow")
+
+    args = build_parser().parse_args(["add", "Child CLI", "--parent", str(parent)])
+    cmd_add(args)
+
+    db2 = Database(str(dbfile))
+    tasks = db2.get_pending_tasks()
+    # find child
+    child = next((t for t in tasks if t["title"] == "Child CLI"), None)
+    assert child is not None
+    assert child["parent_id"] == parent
+
+
+def test_edit_set_parent(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_edit_parent.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    from decidrx.cli import build_parser, cmd_edit
+
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent Edit", None, duration=5, reward=1, penalty=0, effort=1, type="shallow")
+    t = db.add_task("Orphan", None, duration=10, reward=2, penalty=0, effort=1, type="shallow")
+
+    args = build_parser().parse_args(["edit", str(t), "--parent", str(parent)])
+    cmd_edit(args)
+
+    updated = db.get_task(t)
+    assert updated["parent_id"] == parent
+
+
 def test_help_general_and_command(monkeypatch):
     from decidrx import cli
     from rich.panel import Panel
@@ -143,6 +178,161 @@ def test_add_interactive_validation(tmp_path, monkeypatch):
     assert tasks[0]["reward"] == 5
 
 
+def test_add_interactive_with_subtasks(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_interactive_subtasks.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+
+    from rich.prompt import Prompt, IntPrompt, Confirm
+
+    # Parent responses: title, deadline(blank), duration, reward, penalty, effort, description, type
+    prompt_responses = [
+        "Interactive Parent",  # Title
+        "",  # Deadline
+        "",  # description (only used by Prompt.ask calls ordering)
+        "shallow",  # Type
+        # Subtask title
+        "Subtask 1",
+        "",  # Subtask deadline
+        "",  # Subtask description
+        "shallow",  # Subtask type
+    ]
+
+    # IntPrompt responses: parent duration, reward, penalty, effort then subtask duration, reward, penalty, effort
+    int_responses = [
+        "15",  # parent duration
+        "4",
+        "1",
+        "2",
+        "7",  # subtask duration
+        "2",
+        "0",
+        "1",
+    ]
+
+    confirm_responses = [True, False]  # Add subtasks? -> yes; Add another? -> no
+
+    def fake_prompt_ask(prompt, default=None):
+        return prompt_responses.pop(0)
+
+    def fake_int_prompt_ask(prompt, default=None):
+        val = int_responses.pop(0)
+        return int(val) if val != "" else default
+
+    def fake_confirm_ask(prompt, default=None):
+        return confirm_responses.pop(0)
+
+    monkeypatch.setattr(Prompt, "ask", fake_prompt_ask)
+    monkeypatch.setattr(IntPrompt, "ask", fake_int_prompt_ask)
+    monkeypatch.setattr(Confirm, "ask", fake_confirm_ask)
+
+    from decidrx.cli import build_parser, cmd_add
+
+    args = build_parser().parse_args(["add"])
+    cmd_add(args)
+
+    db = Database(str(dbfile))
+    tasks = db.get_pending_tasks()
+    # there should be 2 tasks: parent and subtask
+    assert len(tasks) == 2
+    parent = next((t for t in tasks if t["title"] == "Interactive Parent"), None)
+    child = next((t for t in tasks if t["title"] == "Subtask 1"), None)
+    assert parent is not None
+    assert child is not None
+    assert child["parent_id"] == parent["id"]
+
+
+def test_subtask_add_via_cli_noninteractive(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_subtask_cli.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    from decidrx.cli import build_parser
+
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent CLI", None, duration=5, reward=1, penalty=0, effort=1, type="shallow")
+
+    args = build_parser().parse_args(["subtask", "add", str(parent), "Child CLI", "--duration", "10", "--reward", "2"])
+    # invoke command
+    from decidrx.commands.subtask import cmd_subtask_add
+
+    cmd_subtask_add(args)
+
+    db2 = Database(str(dbfile))
+    tasks = db2.get_pending_tasks()
+    child = next((t for t in tasks if t["title"] == "Child CLI"), None)
+    assert child is not None
+    assert child["parent_id"] == parent
+
+
+def test_subtask_list_shows_children(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_subtask_list.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent List", None, duration=5, reward=1, penalty=0, effort=1, type="shallow")
+    c1 = db.add_task("Child L1", None, duration=5, reward=1, penalty=0, effort=1, type="shallow", parent_id=parent)
+    c2 = db.add_task("Child L2", None, duration=5, reward=1, penalty=0, effort=1, type="shallow", parent_id=parent)
+
+    from decidrx import cli
+    printed = []
+
+    def fake_print(obj, *args, **kwargs):
+        from rich.console import Console
+        c = Console(record=True)
+        c.print(obj)
+        printed.append(c.export_text())
+
+    monkeypatch.setattr(cli.console, "print", fake_print)
+
+    from decidrx.cli import build_parser
+    args = build_parser().parse_args(["subtask", "list", str(parent)])
+    from decidrx.commands.subtask import cmd_subtask_list
+    cmd_subtask_list(args)
+
+    text = "\n".join(s for s in printed if isinstance(s, str))
+    assert str(c1) in text
+    assert str(c2) in text
+
+
+def test_remove_task_cascades_when_confirmed(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_remove.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    p = db.add_task("Parent R", None)
+    c1 = db.add_task("Child R1", None, parent_id=p)
+    c2 = db.add_task("Child R2", None, parent_id=p)
+
+    from decidrx.cli import build_parser
+    from rich.prompt import Confirm
+
+    monkeypatch.setattr(Confirm, "ask", lambda *a, **k: True)
+
+    args = build_parser().parse_args(["remove", str(p)])
+    from decidrx.commands.remove import cmd_remove
+    cmd_remove(args)
+
+    assert db.get_task(p) is None
+    assert db.get_task(c1) is None
+    assert db.get_task(c2) is None
+
+
+def test_subtask_remove_noninteractive(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_subtask_remove.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent R2", None)
+    child = db.add_task("Child R", None, parent_id=parent)
+
+    from decidrx.cli import build_parser
+    from decidrx.commands.subtask import cmd_subtask_remove
+
+    args = build_parser().parse_args(["subtask", "remove", str(parent), str(child)])
+    # monkeypatch confirm to avoid interactive prompt
+    from rich.prompt import Confirm
+    monkeypatch.setattr(Confirm, "ask", lambda *a, **k: True)
+    cmd_subtask_remove(args)
+
+    assert db.get_task(child) is None
+    assert db.get_task(parent) is not None
+
+
 def test_show_shows_tasks(tmp_path, monkeypatch):
     from rich.table import Table
     dbfile = tmp_path / "test_show.db"
@@ -182,6 +372,18 @@ def test_show_shows_tasks(tmp_path, monkeypatch):
 
     # ensure the rendered table includes at least one time-like token (e.g., '1d', '3h', '45m', 'overdue')
     assert re.search(r"\b(overdue\s)?\d+[dhms]\b", text)
+
+    # nested display: parent and child should be visible in show
+    printed.clear()
+    p = db.add_task("Parent Show", now + timedelta(days=3), duration=10, reward=1, penalty=0, effort=1, type="shallow")
+    c = db.add_task("Child Show", None, duration=5, reward=1, penalty=0, effort=1, type="shallow", parent_id=p)
+    args = build_parser().parse_args(["show"])
+    cmd_show(args)
+    text = "\n".join(s for s in printed if isinstance(s, str))
+    # parent/child ids and arrow should be present in rendered table
+    assert str(p) in text
+    assert str(c) in text
+    assert "↳" in text
 
     printed.clear()
     args = build_parser().parse_args(["show", "--all"])

@@ -16,7 +16,7 @@ def cmd_edit(args):
         return
 
     provided_flags = any(
-        getattr(args, k) is not None for k in ("title", "deadline", "duration", "reward", "penalty", "effort", "type")
+        getattr(args, k) is not None for k in ("title", "deadline", "duration", "reward", "penalty", "effort", "type", "parent")
     )
     interactive = getattr(args, "interactive", False) or not provided_flags
 
@@ -27,6 +27,7 @@ def cmd_edit(args):
         new_title = Prompt.ask("Title", default=task["title"]).strip()
         if new_title != task["title"]:
             updates["title"] = new_title
+
 
         # deadline
         cur_dl = task["deadline"]
@@ -145,6 +146,12 @@ def cmd_edit(args):
                 console.print("Type must be 'deep' or 'shallow'.")
                 return
             updates["type"] = args.type
+        if getattr(args, 'parent', None) is not None:
+            # explicit parent flag provided (use 0 to clear parent)
+            if args.parent == 0:
+                updates["parent_id"] = None
+            else:
+                updates["parent_id"] = args.parent
     if not updates:
         console.print("No changes.")
         return
