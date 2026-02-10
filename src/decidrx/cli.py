@@ -13,6 +13,7 @@ from .commands.edit import cmd_edit as cmd_edit
 from .commands.reset import cmd_reset as cmd_reset
 from .commands.archive import cmd_archive as cmd_archive
 from .commands.undone import cmd_undone as cmd_undone
+from .commands.view import cmd_view as cmd_view
 from rich.panel import Panel
 
 # Per-command examples to surface in help
@@ -140,6 +141,11 @@ def build_parser():
     p_remove.add_argument("--yes", action="store_true", help="Skip confirmation and remove immediately")
     from .commands.remove import cmd_remove as cmd_remove
     p_remove.set_defaults(func=cmd_remove)
+
+    p_view = sub.add_parser("view", help="Show detailed task info and its subtasks")
+    p_view.add_argument("task_id", help="Task id to view")
+    from .commands.view import cmd_view as cmd_view
+    p_view.set_defaults(func=cmd_view)
 
     # subtask commands: add a new subtask under an existing task, or list subtasks
     p_sub = sub.add_parser("subtask", help="Manage subtasks for a parent task")

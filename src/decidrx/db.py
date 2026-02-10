@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 DEFAULT_DB = os.environ.get("DECIDRX_DB") or os.path.expanduser("~/.local/share/decidrx/decidrx.db")
@@ -61,7 +61,7 @@ class Database:
 
     def add_task(self, title: str, deadline: Optional[datetime], description: Optional[str] = None, duration: int = 0, reward: int = 0, penalty: int = 0, effort: int = 0, type: str = "shallow", parent_id: Optional[int] = None) -> int:
         """Create a task. Optional `parent_id` links this task as a subtask of an existing task."""
-        created_at = datetime.utcnow().isoformat()
+        created_at = datetime.now(timezone.utc).isoformat()
         deadline_s = deadline.isoformat() if deadline else None
         cur = self.conn.cursor()
         # validate parent exists if provided
@@ -115,7 +115,7 @@ class Database:
 
     def mark_done(self, task_id: int):
         cur = self.conn.cursor()
-        completed_at = datetime.utcnow().isoformat()
+        completed_at = datetime.now(timezone.utc).isoformat()
         cur.execute("UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ?", (completed_at, task_id))
         cur.execute("INSERT INTO completions (task_id, completed_at) VALUES (?, ?)", (task_id, completed_at))
         self.conn.commit()
@@ -158,7 +158,7 @@ class Database:
         while parent_id is not None:
             incomplete = cur.execute("SELECT COUNT(*) FROM tasks WHERE parent_id = ? AND completed = 0", (parent_id,)).fetchone()[0]
             if incomplete == 0:
-                completed_at = datetime.utcnow().isoformat()
+                completed_at = datetime.now(timezone.utc).isoformat()
                 cur.execute("UPDATE tasks SET completed = 1, completed_at = ? WHERE id = ?", (completed_at, parent_id))
                 cur.execute("INSERT INTO completions (task_id, completed_at) VALUES (?, ?)", (parent_id, completed_at))
                 self.conn.commit()
