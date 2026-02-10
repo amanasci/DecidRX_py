@@ -28,7 +28,8 @@ def test_archive_nested_display(tmp_path, monkeypatch):
     cmd_archive(args)
 
     text = "\n".join(s for s in printed if isinstance(s, str))
-    # verify parent/child ids and arrow are present
+    # verify parent/child ids and tree connector are present
     assert str(parent) in text
     assert str(child) in text
-    assert "↳" in text
+    import re
+    assert re.search(r"[├└]", text)

@@ -33,3 +33,8 @@ def test_now_shows_aggregated_marker(tmp_path, monkeypatch):
     assert "(agg)" in text
     # ensure parent id is present as well
     assert str(parent) in text
+    # children should be shown in a compact tree after the table
+    assert str(c1) in text
+    assert str(c2) in text
+    import re
+    assert re.search(r"[├└]", text)

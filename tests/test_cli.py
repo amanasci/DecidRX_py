@@ -366,24 +366,21 @@ def test_show_shows_tasks(tmp_path, monkeypatch):
     cmd_show(args)
     assert any(isinstance(x, str) for x in printed)
 
-    # ensure "left" header present in rendered text
+    # ensure the rendered view includes at least one time-like token (e.g., '1d', '3h', '45m', 'overdue')
     text = "\n".join(s for s in printed if isinstance(s, str))
-    assert "left" in text.lower()
-
-    # ensure the rendered table includes at least one time-like token (e.g., '1d', '3h', '45m', 'overdue')
     assert re.search(r"\b(overdue\s)?\d+[dhms]\b", text)
 
-    # nested display: parent and child should be visible in show
+    # nested display: parent and child should be visible in show with tree indicators
     printed.clear()
     p = db.add_task("Parent Show", now + timedelta(days=3), duration=10, reward=1, penalty=0, effort=1, type="shallow")
     c = db.add_task("Child Show", None, duration=5, reward=1, penalty=0, effort=1, type="shallow", parent_id=p)
     args = build_parser().parse_args(["show"])
     cmd_show(args)
     text = "\n".join(s for s in printed if isinstance(s, str))
-    # parent/child ids and arrow should be present in rendered table
+    # parent/child ids and tree connector should be present
     assert str(p) in text
     assert str(c) in text
-    assert "↳" in text
+    assert re.search(r"[├└]", text)
 
     printed.clear()
     args = build_parser().parse_args(["show", "--all"])

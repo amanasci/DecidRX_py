@@ -50,11 +50,32 @@ def cmd_now(args):
     table.add_column("title", style="bold")
     table.add_column("score", justify="right")
 
+    displayed = set()
     for idx, (score, t) in enumerate(top, start=1):
+        # If this row is a child that was already displayed under its parent, skip
+        if t.get("id") in displayed:
+            continue
         # mark aggregated parent rows so users can tell them apart
         title = t.get("title") or ""
         if t.get("_is_aggregate"):
             title = f"{title} (agg)"
         table.add_row(str(idx), str(t["id"]), title, f"{score:.3f}")
+        displayed.add(t.get("id"))
+        # if task has children, render them as inline rows with tree-style prefixes
+        try:
+            children = db.get_children(t["id"])
+        except Exception:
+            children = []
+        for i, c in enumerate(children):
+            # skip if child was explicitly in top and already displayed
+            if c["id"] in displayed:
+                continue
+            is_more = (i < len(children) - 1)
+            prefix = "├── " if is_more else "└── "
+            def v(key):
+                return c[key] if key in c.keys() and c[key] is not None else 0
+            child_title = f"{prefix}{c['title']}"
+            table.add_row("", str(c["id"]), child_title, "")
+            displayed.add(c["id"])
 
     console.print(table)
