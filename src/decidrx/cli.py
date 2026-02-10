@@ -53,6 +53,16 @@ EXAMPLES = {
         "  decidrx subtask remove <parent_id> <child_id>  # remove a subtask (confirms)\n"
         "  decidrx subtask edit <parent_id> <child_id> [--flags]  # edit a subtask"
     ),
+    "calendar": (
+        "decidrx calendar                 # show current month calendar with deadline heatmap\n"
+        "  decidrx calendar YEAR MONTH     # show a specific month (e.g. 2026 02)\n"
+        "  decidrx calendar show YYYY-MM-DD # show tasks and blocked-day info for that date\n"
+        "  decidrx calendar add YYYY-MM-DD --reason '...'  # add a blocked day\n"
+        "  decidrx calendar remove YYYY-MM-DD            # remove a blocked day\n"
+        "  decidrx calendar bad add YYYY-MM-DD --reason '...' # alias for blocked day add\n"
+        "  decidrx calendar bad remove YYYY-MM-DD            # alias for blocked day remove\n"
+        "  decidrx calendar bad list [YEAR MONTH]            # list blocked (bad) days"
+    ),
 }
 
 
@@ -189,6 +199,17 @@ def build_parser():
     p_sub_edit.add_argument("--interactive", action="store_true", help="Force interactive editing")
     from .commands.subtask import cmd_subtask_edit as cmd_subtask_edit
     p_sub_edit.set_defaults(func=cmd_subtask_edit)
+
+    # Calendar commands: monthly calendar heatmap, blocked day CRUD, and per-day show
+    p_cal = sub.add_parser("calendar", help="Show a monthly calendar with deadlines and manage blocked days")
+    p_cal.add_argument("--local", action="store_true", help="Group deadlines by local timezone (default)")
+    p_cal.add_argument("--all", action="store_true", help="Include completed tasks in calendar views and day shows")
+    # calendar accepts either a plain month view: `decidrx calendar [YEAR] [MONTH]`
+    # or a sub-command style: `decidrx calendar add YYYY-MM-DD --reason ...` etc.
+    # To avoid argparse ambiguity we capture remaining args into `args` and let the handler decide.
+    p_cal.add_argument("args", nargs=argparse.REMAINDER, help="Either: YEAR MONTH  OR: add|remove|show <date> [--reason]")
+    from .commands.calendar import cmd_calendar as cmd_calendar
+    p_cal.set_defaults(func=cmd_calendar)
 
     return parser
 

@@ -57,6 +57,16 @@ class Database:
             completed_at TEXT
         )
         """)
+        # blocked_days: dates when the user cannot work (one-off dates with optional reason)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS blocked_days (
+            id INTEGER PRIMARY KEY,
+            date TEXT NOT NULL,
+            reason TEXT,
+            created_at TEXT NOT NULL
+        )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_blocked_days_date ON blocked_days(date)")
         self.conn.commit()
 
     def add_task(self, title: str, deadline: Optional[datetime], description: Optional[str] = None, duration: int = 0, reward: int = 0, penalty: int = 0, effort: int = 0, type: str = "shallow", parent_id: Optional[int] = None) -> int:
@@ -111,6 +121,86 @@ class Database:
     def get_pending_tasks(self) -> List[sqlite3.Row]:
         cur = self.conn.cursor()
         cur.execute("SELECT * FROM tasks WHERE completed = 0")
+        return cur.fetchall()
+
+    # Date-range and blocked-days helpers
+    def get_tasks_between(self, start_dt: datetime, end_dt: datetime, include_completed: bool = False) -> List[sqlite3.Row]:
+        """Return tasks with a non-null deadline where deadline >= start_dt and deadline < end_dt.
+        Expects start_dt and end_dt to be timezone-aware datetimes. Will compare ISO strings.
+        By default this excludes completed tasks unless include_completed=True.
+        """
+        cur = self.conn.cursor()
+        start_s = start_dt.isoformat()
+        end_s = end_dt.isoformat()
+        sql = "SELECT * FROM tasks WHERE deadline IS NOT NULL AND deadline >= ? AND deadline < ?"
+        if not include_completed:
+            sql += " AND completed = 0"
+        sql += " ORDER BY deadline"
+        cur.execute(sql, (start_s, end_s))
+        return cur.fetchall()
+
+    def get_tasks_on(self, date_obj, tzinfo=None, include_completed: bool = False) -> List[sqlite3.Row]:
+        """Return tasks whose deadlines fall on the provided date (date or YYYY-MM-DD string).
+        The date is interpreted in the provided tzinfo (defaults to UTC). Excludes completed tasks by default.
+        """
+        from datetime import timezone, datetime as _datetime
+        if isinstance(date_obj, str):
+            d = _datetime.fromisoformat(date_obj).date()
+        else:
+            d = date_obj
+        tz = tzinfo or timezone.utc
+        start = _datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tz).astimezone(timezone.utc)
+        end = (start + __import__('datetime').timedelta(days=1))
+        return self.get_tasks_between(start, end, include_completed=include_completed)
+
+    def get_tasks_for_month(self, year: int, month: int, tzinfo=None, include_completed: bool = False) -> List[sqlite3.Row]:
+        from datetime import datetime as _datetime, timezone
+        tz = tzinfo or timezone.utc
+        start_local = _datetime(year, month, 1, 0, 0, 0, tzinfo=tz)
+        # compute first of next month
+        if month == 12:
+            next_local = _datetime(year + 1, 1, 1, 0, 0, 0, tzinfo=tz)
+        else:
+            next_local = _datetime(year, month + 1, 1, 0, 0, 0, tzinfo=tz)
+        start_utc = start_local.astimezone(timezone.utc)
+        end_utc = next_local.astimezone(timezone.utc)
+        return self.get_tasks_between(start_utc, end_utc, include_completed=include_completed)
+
+    def add_blocked_day(self, date_obj, reason: Optional[str] = None) -> int:
+        """Add a blocked day. `date_obj` may be a date or a YYYY-MM-DD string. Returns inserted row id."""
+        from datetime import datetime as _datetime
+        if isinstance(date_obj, str):
+            # accept 'YYYY-MM-DD'
+            d = _datetime.fromisoformat(date_obj).date()
+        else:
+            d = date_obj
+        date_s = d.isoformat()
+        created_at = _datetime.now(timezone.utc).isoformat()
+        cur = self.conn.cursor()
+        cur.execute("INSERT INTO blocked_days (date, reason, created_at) VALUES (?, ?, ?)", (date_s, reason, created_at))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def remove_blocked_day(self, date_obj) -> int:
+        """Remove blocked day(s) matching the date. Returns number of rows deleted."""
+        if isinstance(date_obj, str):
+            date_s = date_obj
+        else:
+            date_s = date_obj.isoformat()
+        cur = self.conn.cursor()
+        cur.execute("DELETE FROM blocked_days WHERE date = ?", (date_s,))
+        self.conn.commit()
+        return cur.rowcount
+
+    def get_blocked_days_in_month(self, year: int, month: int) -> List[sqlite3.Row]:
+        from datetime import date as _date
+        start = _date(year, month, 1).isoformat()
+        if month == 12:
+            end = _date(year + 1, 1, 1).isoformat()
+        else:
+            end = _date(year, month + 1, 1).isoformat()
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM blocked_days WHERE date >= ? AND date < ? ORDER BY date", (start, end))
         return cur.fetchall()
 
     def mark_done(self, task_id: int):
