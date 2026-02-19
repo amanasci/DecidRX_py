@@ -25,6 +25,12 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+To check for updates:
+
+```bash
+decidrx update
+```
+
 You can also use `pip install .` for a normal install.
 
 ---

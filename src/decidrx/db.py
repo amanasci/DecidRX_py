@@ -69,6 +69,21 @@ class Database:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_blocked_days_date ON blocked_days(date)")
         self.conn.commit()
 
+        # user_stats: single row table for gamification
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_stats (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            xp INTEGER DEFAULT 0,
+            level INTEGER DEFAULT 1,
+            current_streak INTEGER DEFAULT 0,
+            last_completed_date TEXT,
+            best_streak INTEGER DEFAULT 0
+        )
+        """)
+        # Initialize the single row if it doesn't exist
+        cur.execute("INSERT OR IGNORE INTO user_stats (id, xp, level, current_streak, best_streak) VALUES (1, 0, 1, 0, 0)")
+        self.conn.commit()
+
     def add_task(self, title: str, deadline: Optional[datetime], description: Optional[str] = None, duration: int = 0, reward: int = 0, penalty: int = 0, effort: int = 0, type: str = "shallow", parent_id: Optional[int] = None) -> int:
         """Create a task. Optional `parent_id` links this task as a subtask of an existing task."""
         created_at = datetime.now(timezone.utc).isoformat()
