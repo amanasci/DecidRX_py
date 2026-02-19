@@ -211,7 +211,27 @@ def build_parser():
     from .commands.calendar import cmd_calendar as cmd_calendar
     p_cal.set_defaults(func=cmd_calendar)
 
+    # Update command
+    p_update = sub.add_parser("update", help="Check for updates from upstream GitHub repository")
+    p_update.set_defaults(func=cmd_update)
+
     return parser
+
+
+def cmd_update(args):
+    """Check for updates."""
+    from .update_checker import check_for_updates
+    
+    console.print("[bold blue]Checking for updates...[/bold blue]")
+    available, latest, current = check_for_updates()
+    
+    if available is None:
+        console.print(f"[bold red]Error checking for updates:[/bold red] {latest}")
+    elif available:
+        console.print(f"[bold green]New version {latest} is available![/bold green] (Current: {current})")
+        console.print("Please update via: pip install --upgrade decidrx")
+    else:
+        console.print(f"[bold green]You are using the latest version ({current}).[/bold green]")
 
 
 def cmd_help(args):
