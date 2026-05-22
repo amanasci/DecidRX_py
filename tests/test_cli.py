@@ -313,6 +313,38 @@ def test_remove_task_cascades_when_confirmed(tmp_path, monkeypatch):
     assert db.get_task(c2) is None
 
 
+def test_remove_multiple_tasks_noninteractive(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_remove_multiple.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    t1 = db.add_task("Task A", None)
+    t2 = db.add_task("Task B", None)
+
+    from decidrx.cli import build_parser
+    args = build_parser().parse_args(["remove", str(t1), str(t2), "--yes"])
+    from decidrx.commands.remove import cmd_remove
+    cmd_remove(args)
+
+    assert db.get_task(t1) is None
+    assert db.get_task(t2) is None
+
+
+def test_remove_parent_and_child_in_same_command(tmp_path, monkeypatch):
+    dbfile = tmp_path / "test_remove_parent_and_child.db"
+    monkeypatch.setenv("DECIDRX_DB", str(dbfile))
+    db = Database(str(dbfile))
+    parent = db.add_task("Parent R3", None)
+    child = db.add_task("Child R3", None, parent_id=parent)
+
+    from decidrx.cli import build_parser
+    args = build_parser().parse_args(["remove", str(parent), str(child), "--yes"])
+    from decidrx.commands.remove import cmd_remove
+    cmd_remove(args)
+
+    assert db.get_task(parent) is None
+    assert db.get_task(child) is None
+
+
 def test_subtask_remove_noninteractive(tmp_path, monkeypatch):
     dbfile = tmp_path / "test_subtask_remove.db"
     monkeypatch.setenv("DECIDRX_DB", str(dbfile))

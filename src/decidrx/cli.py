@@ -43,8 +43,8 @@ EXAMPLES = {
     ),
     "archive": "decidrx archive  # show every task in the DB (history view)",
     "remove": (
-        "decidrx remove <task_id>  # delete a task; will ask to confirm if it has subtasks\n"
-        "  decidrx remove <task_id> --yes  # delete without prompting (use in scripts)"
+        "decidrx remove <task_id> [<task_id> ...]  # delete one or more tasks; will ask to confirm if any have subtasks\n"
+        "  decidrx remove <task_id> [<task_id> ...] --yes  # delete without prompting (use in scripts)"
     ),
     "subtask": (
         "decidrx subtask add <parent_id> [title] [--flags]  # add a subtask to an existing task\n"
@@ -146,8 +146,8 @@ def build_parser():
     p_archive = sub.add_parser("archive", help="Show all tasks irrespective of done status")
     p_archive.set_defaults(func=cmd_archive)
 
-    p_remove = sub.add_parser("remove", help="Remove a task (asks to confirm and cascades to subtasks)")
-    p_remove.add_argument("task_id", help="Task id to remove")
+    p_remove = sub.add_parser("remove", help="Remove one or more tasks (asks to confirm and cascades to subtasks)")
+    p_remove.add_argument("task_id", nargs="+", help="Task id(s) to remove")
     p_remove.add_argument("--yes", action="store_true", help="Skip confirmation and remove immediately")
     from .commands.remove import cmd_remove as cmd_remove
     p_remove.set_defaults(func=cmd_remove)
